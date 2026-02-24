@@ -1,16 +1,16 @@
-module github.com/RSSU-Shellcode/GRT-PELoader
+module github.com/RTS-Framework/GRT-PELoader
 
 go 1.20
 
 require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/For-ACGN/LZSS v1.0.1
-	github.com/RSSU-Shellcode/GRT-Develop v1.8.1
+    github.com/RTS-Framework/GRT-Develop v1.9.0
 	github.com/stretchr/testify v1.11.1
 
 	golang.org/x/sys v0.29.0
 
-	github.com/RSSU-Shellcode/Gleam-RT v0.0.0-20251225053303-6f20f65be6de
+	github.com/RTS-Framework/Gleam-RT v0.0.0-20260224055149-b38f426d2d4a
 )
 
 require (
