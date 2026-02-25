@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RSSU-Shellcode/GRT-Develop/option"
-	"github.com/RSSU-Shellcode/GRT-PELoader/loader"
+	"github.com/RTS-Framework/GRT-Develop/option"
+	"github.com/RTS-Framework/GRT-PELoader/loader"
 )
 
 var (
