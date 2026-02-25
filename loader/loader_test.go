@@ -16,7 +16,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/require"
 
-	"github.com/RSSU-Shellcode/Gleam-RT/runtime"
+	"github.com/RTS-Framework/Gleam-RT/runtime"
 )
 
 var (
