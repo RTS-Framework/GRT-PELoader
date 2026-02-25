@@ -14,7 +14,7 @@ const modeFile = 2
 
 // File is the local file mode.
 type File struct {
-	Path string
+	Path string `toml:"path" json:"path"`
 }
 
 // NewFile is used to create image with local file mode.
