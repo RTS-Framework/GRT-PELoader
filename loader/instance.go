@@ -9,8 +9,8 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/RSSU-Shellcode/GRT-Develop/argument"
-	"github.com/RSSU-Shellcode/GRT-Develop/option"
+	"github.com/RTS-Framework/GRT-Develop/argument"
+	"github.com/RTS-Framework/GRT-Develop/option"
 )
 
 // just for prevent [import _ "embed"] :)

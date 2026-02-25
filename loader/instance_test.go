@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/RSSU-Shellcode/GRT-Develop/argument"
+	"github.com/RTS-Framework/GRT-Develop/argument"
 )
 
 var images = []struct {

@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/RSSU-Shellcode/GRT-Develop/serialization"
-	"github.com/RSSU-Shellcode/GRT-Develop/winhttp"
+	"github.com/RTS-Framework/GRT-Develop/serialization"
+	"github.com/RTS-Framework/GRT-Develop/winhttp"
 )
 
 // +-----------+-----------------+
