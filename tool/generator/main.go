@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/RSSU-Shellcode/GRT-Develop/option"
-	"github.com/RSSU-Shellcode/GRT-PELoader/loader"
+	"github.com/RTS-Framework/GRT-Develop/option"
+	"github.com/RTS-Framework/GRT-PELoader/loader"
 )
 
 var (
@@ -130,7 +130,7 @@ func main() {
 	outPath, err = filepath.Abs(outPath)
 	checkError(err)
 	fmt.Println("save instance to:", outPath)
-	err = os.WriteFile(outPath, instance, 0600)
+	err = os.WriteFile(outPath, instance, 0600) // #nosec
 	checkError(err)
 
 	fmt.Println("generate shellcode successfully")
