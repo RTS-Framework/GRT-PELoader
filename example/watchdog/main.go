@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/RSSU-Shellcode/Gleam-RT/runtime/watchdog"
+	"github.com/RTS-Framework/Gleam-RT/runtime/watchdog"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/RSSU-Shellcode/Gleam-RT/runtime"
+	"github.com/RTS-Framework/Gleam-RT/runtime"
 )
 
 func main() {

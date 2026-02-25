@@ -5,7 +5,7 @@ import (
 	"log"
 	"unsafe"
 
-	"github.com/RSSU-Shellcode/Gleam-RT/runtime/argument"
+	"github.com/RTS-Framework/Gleam-RT/runtime/argument"
 )
 
 // arg id 2 is CommandLineA

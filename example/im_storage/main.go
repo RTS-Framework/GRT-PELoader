@@ -6,7 +6,7 @@ import (
 	"log"
 	"unsafe"
 
-	"github.com/RSSU-Shellcode/Gleam-RT/runtime/storage"
+	"github.com/RTS-Framework/Gleam-RT/runtime/storage"
 )
 
 func main() {

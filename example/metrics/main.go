@@ -5,7 +5,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 
-	"github.com/RSSU-Shellcode/Gleam-RT/runtime"
+	"github.com/RTS-Framework/Gleam-RT/runtime"
 )
 
 func main() {
