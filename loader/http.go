@@ -20,24 +20,24 @@ const modeHTTP = 3
 
 // HTTP is the HTTP mode.
 type HTTP struct {
-	URL  string
-	Opts *HTTPOptions
+	URL  string       `toml:"url"     json:"url"`
+	Opts *HTTPOptions `toml:"options" json:"options"`
 }
 
 // HTTPOptions contains HTTP mode options.
 type HTTPOptions struct {
-	Headers   http.Header
-	UserAgent string
-	ProxyURL  string
-	ProxyUser string
-	ProxyPass string
+	Headers   http.Header `toml:"headers"    json:"headers"`
+	UserAgent string      `toml:"user_agent" json:"user_agent"`
+	ProxyURL  string      `toml:"proxy_url"  json:"proxy_url"`
+	ProxyUser string      `toml:"proxy_user" json:"proxy_user"`
+	ProxyPass string      `toml:"proxy_pass" json:"proxy_pass"`
 
-	ConnectTimeout time.Duration
-	SendTimeout    time.Duration
-	ReceiveTimeout time.Duration
+	ConnectTimeout time.Duration `toml:"connect_timeout" json:"connect_timeout"`
+	SendTimeout    time.Duration `toml:"send_timeout"    json:"send_timeout"`
+	ReceiveTimeout time.Duration `toml:"receive_timeout" json:"receive_timeout"`
 
-	MaxBodySize uint32
-	AccessType  uint8
+	MaxBodySize uint32 `toml:"max_body_size" json:"max_body_size"`
+	AccessType  uint8  `toml:"access_type"   json:"access_type"`
 }
 
 // NewHTTP is used to create image with HTTP mode.
