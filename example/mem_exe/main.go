@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/RSSU-Shellcode/GRT-PELoader/loader"
+	"github.com/RTS-Framework/GRT-PELoader/loader"
 )
 
 func main() {
