@@ -7,7 +7,6 @@
 #include "pe_loader.h"
 #include "boot.h"
 
-static errno loadOption(Runtime_Opts* options);
 static errno loadConfig(Runtime_M* runtime, PELoader_Cfg* config);
 static void* loadImage(Runtime_M* runtime, byte* config, uint32 size);
 static errno eraseArguments(Runtime_M* runtime);
@@ -16,49 +15,19 @@ static void* loadImageFromEmbed(Runtime_M* runtime, byte* config);
 static void* loadImageFromFile(Runtime_M* runtime, byte* config);
 static void* loadImageFromHTTP(Runtime_M* runtime, byte* config);
 
-PELoader_M* Boot()
+PELoader_M* Boot(void* ctx)
 {
     // initialize Gleam-RT for PE Loader
-    Runtime_Opts options = {
-        .BootInstAddress     = GetFuncAddr(&Boot),
-        .EnableSecurityMode  = false,
-        .DisableDetector     = false,
-        .DisableWatchdog     = false,
-        .DisableSysmon       = false,
-        .NotEraseInstruction = false,
-        .NotAdjustProtect    = false,
-        .TrackCurrentThread  = false,
-    };
-    errno elo = loadOption(&options);
-    if (elo != NO_ERROR)
-    {
-        SetLastErrno(elo);
-        return NULL;
-    }
-    Runtime_M* runtime = InitRuntime(&options);
+    Runtime_M* runtime = InitRuntime(GetFuncAddr(&Boot), NULL);
     if (runtime == NULL)
     {
         return NULL;
     }
+    (void)ctx; // reserved extended arguments
 
     // load config and initialize PE Loader
     PELoader_Cfg config = {
-        .FindAPI = runtime->HashAPI.FindAPI,
-
-        .Image          = NULL,
-        .CommandLineA   = NULL,
-        .CommandLineW   = NULL,
-        .WaitMain       = false,
-        .AllowSkipDLL   = false,
-        .IgnoreStdIO    = false,
-        .StdInput       = NULL,
-        .StdOutput      = NULL,
-        .StdError       = NULL,
-        .NotAutoRun     = false,
-        .NotStopRuntime = false,
-
-        .NotEraseInstruction = options.NotEraseInstruction,
-        .NotAdjustProtect    = options.NotAdjustProtect,
+        .FindAPI = runtime->HashAPI.FindAPI_MA,
     };
     PELoader_M* loader = NULL;
     errno err = NO_ERROR;
@@ -75,7 +44,9 @@ PELoader_M* Boot()
             err = GetLastErrno();
             break;
         }
+        // free image page at once
         runtime->Memory.Free(config.Image);
+        // erase useless arguments
         err = eraseArguments(runtime);
         if (err != NO_ERROR)
         {
@@ -112,28 +83,6 @@ PELoader_M* Boot()
     return (PELoader_M*)(1);
 }
 
-__declspec(noinline)
-static errno loadOption(Runtime_Opts* options)
-{
-    uintptr stub = (uintptr)(GetFuncAddr(&Argument_Stub));
-    stub -= OPTION_STUB_SIZE;
-    // check runtime option stub is valid
-    if (*(byte*)stub != OPTION_STUB_MAGIC)
-    {
-        return ERR_INVALID_OPTION_STUB;
-    }
-    // load runtime options from stub
-    options->EnableSecurityMode  = *(bool*)(stub + OPT_OFFSET_ENABLE_SECURITY_MODE);
-    options->DisableDetector     = *(bool*)(stub + OPT_OFFSET_DISABLE_DETECTOR);
-    options->DisableWatchdog     = *(bool*)(stub + OPT_OFFSET_DISABLE_WATCHDOG);
-    options->DisableSysmon       = *(bool*)(stub + OPT_OFFSET_DISABLE_SYSMON);
-    options->NotEraseInstruction = *(bool*)(stub + OPT_OFFSET_NOT_ERASE_INSTRUCTION);
-    options->NotAdjustProtect    = *(bool*)(stub + OPT_OFFSET_NOT_ADJUST_PROTECT);
-    options->TrackCurrentThread  = *(bool*)(stub + OPT_OFFSET_TRACK_CURRENT_THREAD);
-    return NO_ERROR;
-}
-
-__declspec(noinline)
 static errno loadConfig(Runtime_M* runtime, PELoader_Cfg* config)
 {
     // load PE Image, it cannot be empty
@@ -162,33 +111,6 @@ static errno loadConfig(Runtime_M* runtime, PELoader_Cfg* config)
     {
         return ERR_NOT_FOUND_CMDLINE_W;
     }
-    // load WaitMain, it must be true of false
-    if (!runtime->Argument.GetValue(ARG_ID_WAIT_MAIN, &config->WaitMain, &size))
-    {
-        return ERR_NOT_FOUND_WAIT_MAIN;
-    }
-    if (size != sizeof(bool))
-    {
-        return ERR_INVALID_WAIT_MAIN;
-    }
-    // load AllowSkipDLL, it must be true of false
-    if (!runtime->Argument.GetValue(ARG_ID_ALLOW_SKIP_DLL, &config->AllowSkipDLL, &size))
-    {
-        return ERR_NOT_FOUND_ALLOW_SKIP_DLL;
-    }
-    if (size != sizeof(bool))
-    {
-        return ERR_INVALID_ALLOW_SKIP_DLL;
-    }
-    // load IgnoreStdIO, it must be true of false
-    if (!runtime->Argument.GetValue(ARG_ID_IGNORE_STD_IO, &config->IgnoreStdIO, &size))
-    {
-        return ERR_NOT_FOUND_IGNORE_STD_IO;
-    }
-    if (size != sizeof(bool))
-    {
-        return ERR_INVALID_IGNORE_STD_IO;
-    }
     // load STD_INPUT_HANDLE, it can be zero
     if (!runtime->Argument.GetValue(ARG_ID_STD_INPUT, &config->StdInput, &size))
     {
@@ -215,6 +137,33 @@ static errno loadConfig(Runtime_M* runtime, PELoader_Cfg* config)
     if (size != sizeof(HANDLE))
     {
         return ERR_INVALID_STD_ERROR;
+    }
+    // load WaitMain, it must be true of false
+    if (!runtime->Argument.GetValue(ARG_ID_WAIT_MAIN, &config->WaitMain, &size))
+    {
+        return ERR_NOT_FOUND_WAIT_MAIN;
+    }
+    if (size != sizeof(bool))
+    {
+        return ERR_INVALID_WAIT_MAIN;
+    }
+    // load AllowSkipDLL, it must be true of false
+    if (!runtime->Argument.GetValue(ARG_ID_ALLOW_SKIP_DLL, &config->AllowSkipDLL, &size))
+    {
+        return ERR_NOT_FOUND_ALLOW_SKIP_DLL;
+    }
+    if (size != sizeof(bool))
+    {
+        return ERR_INVALID_ALLOW_SKIP_DLL;
+    }
+    // load IgnoreStdIO, it must be true of false
+    if (!runtime->Argument.GetValue(ARG_ID_IGNORE_STD_IO, &config->IgnoreStdIO, &size))
+    {
+        return ERR_NOT_FOUND_IGNORE_STD_IO;
+    }
+    if (size != sizeof(bool))
+    {
+        return ERR_INVALID_IGNORE_STD_IO;
     }
     // load NotAutoRun, it must be true of false
     if (!runtime->Argument.GetValue(ARG_ID_NOT_AUTO_RUN, &config->NotAutoRun, &size))
@@ -266,14 +215,14 @@ static void* loadImageFromEmbed(Runtime_M* runtime, byte* config)
     config++;
     switch (mode)
     {
-    case EMBED_DISABLE_COMPRESS:
+    case EMBED_DISABLE_COMPRESSION:
       {
         uint32 size = *(uint32*)config;
         void* buf = runtime->Memory.Alloc(size);
         mem_copy(buf, config + 4, size);
         return buf;
       }
-    case EMBED_ENABLE_COMPRESS:
+    case EMBED_ENABLE_COMPRESSION:
       {
         uint32 rawSize = *(uint32*)(config+0);
         uint32 comSize = *(uint32*)(config+4);
@@ -344,12 +293,12 @@ static errno eraseArguments(Runtime_M* runtime)
     uint32 id[] = 
     {
         ARG_ID_PE_IMAGE,
-        ARG_ID_WAIT_MAIN,
-        ARG_ID_ALLOW_SKIP_DLL,
-        ARG_ID_IGNORE_STD_IO,
         ARG_ID_STD_INPUT,
         ARG_ID_STD_OUTPUT,
         ARG_ID_STD_ERROR,
+        ARG_ID_WAIT_MAIN,
+        ARG_ID_ALLOW_SKIP_DLL,
+        ARG_ID_IGNORE_STD_IO,
         ARG_ID_NOT_AUTO_RUN,
         ARG_ID_NOT_STOP_RUNTIME,
     };
