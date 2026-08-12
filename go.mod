@@ -10,7 +10,7 @@ require (
 	golang.org/x/sys v0.30.0
 
 	github.com/RTS-Framework/GRT-Develop v1.9.1-0.20260724042059-76827c834101
-	github.com/RTS-Framework/Gleam-RT v0.0.0-20260731062745-88cf195ee96a
+	github.com/RTS-Framework/Gleam-RT v0.0.0-20260811065631-daa9d414a2d5
 )
 
 require (
