@@ -4,20 +4,20 @@
 #include "build.h"
 #include "c_types.h"
 
-#ifdef RELEASE_MODE
-    #define NAME_LDR_MUTEX_GLOBAL NULL
-    #define NAME_LDR_MUTEX_STATUS NULL
-#else
-#ifdef _WIN64
+#ifdef ENABLE_DEBUGGER
+  #ifdef _WIN64
     #define NAME_LDR_MUTEX_GLOBAL "x64_LDR_Global"
     #define NAME_LDR_MUTEX_STATUS "x64_LDR_Status"
-#elif _WIN32
+  #elif _WIN32
     #define NAME_LDR_MUTEX_GLOBAL "x86_LDR_Global"
     #define NAME_LDR_MUTEX_STATUS "x86_LDR_Status"
-#endif
-#endif // RELEASE_MODE
+  #endif
+#else
+    #define NAME_LDR_MUTEX_GLOBAL NULL
+    #define NAME_LDR_MUTEX_STATUS NULL
+#endif // ENABLE_DEBUGGER
 
-#ifndef RELEASE_MODE
+#ifdef ENABLE_DEBUGGER
 
 bool InitDebugger();
 
@@ -35,6 +35,6 @@ void dbg_log(char* mod, char* fmt, ...);
 
 #define dbg_log(mod, fmt, ...)
 
-#endif // RELEASE_MODE
+#endif // ENABLE_DEBUGGER
 
 #endif // DEBUG_H
