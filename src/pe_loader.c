@@ -136,6 +136,7 @@ static bool  lockMainMemPage(PELoader* loader);
 static void  erasePELoaderMethods(PELoader* loader);
 static errno cleanPELoader(PELoader* loader);
 static void  setPELoaderPointer(PELoader* loader);
+static void  cleanInitStack();
 
 static bool ldr_lock();
 static bool ldr_unlock();
@@ -320,6 +321,7 @@ PELoader_M* InitPELoader(Runtime_M* runtime, PELoader_Cfg* config)
     if (errno != NO_ERROR)
     {
         cleanPELoader(loader);
+        cleanInitStack();
         SetLastErrno(errno);
         return NULL;
     }
@@ -341,6 +343,7 @@ PELoader_M* InitPELoader(Runtime_M* runtime, PELoader_Cfg* config)
     module->Execute  = GetFuncAddr(&LDR_Execute);
     module->Exit     = GetFuncAddr(&LDR_Exit);
     module->Destroy  = GetFuncAddr(&LDR_Destroy);
+    cleanInitStack();
     return module;
 }
 
@@ -446,6 +449,9 @@ static bool initPELoaderAPI(PELoader* loader)
     loader->GetCommandLineW     = list[0x0E].proc;
     loader->LocalFree           = list[0x0F].proc;
     loader->GetStdHandle        = list[0x10].proc;
+
+    // erase data in the large stack
+    mem_init(list, sizeof(list));
     return true;
 }
 
@@ -596,6 +602,8 @@ static bool checkPEImage(PELoader* loader)
 
 static bool mapSections(PELoader* loader)
 {
+    Runtime_M* runtime = loader->Runtime;
+
     // select the memory page address
     LPVOID base = NULL;
     if (loader->IsFixed)
@@ -604,7 +612,7 @@ static bool mapSections(PELoader* loader)
     }
     // append random memory size to image tail
     uint32 size = loader->ImageSize;
-    size += (uint32)((1 + loader->Runtime->Random.UintN(0, 128)) * 4096);
+    size += (uint32)((1 + runtime->Random.UintN(0, 128)) * 4096);
     // allocate memory for map PE image
     DWORD type = MEM_COMMIT|MEM_RESERVE;
     void* mem = loader->VirtualAlloc(base, size, type, PAGE_EXECUTE_READWRITE);
@@ -615,7 +623,7 @@ static bool mapSections(PELoader* loader)
     loader->PEImage = (uintptr)mem;
     // lock memory region with special argument for reuse PE image
 #ifndef NO_RUNTIME
-    if (!loader->Runtime->Memory.Lock(mem))
+    if (!runtime->Memory.Lock(mem))
     {
         return false;
     }
@@ -642,6 +650,9 @@ static bool mapSections(PELoader* loader)
     }
     // update EntryPoint absolute address
     loader->EntryPoint += peImage;
+    // fill area before the first section
+    section = (Image_SectionHeader*)(loader->Section);
+    runtime->Crypto.EraseInstruction(mem, section->VirtualAddress);
     return true;
 }
 
@@ -820,10 +831,13 @@ static bool backupPEImage(PELoader* loader)
 {
     Runtime_M* runtime = loader->Runtime;
 
+    uint window = MAXIMUM_WINDOW_SIZE;
+    uint chain  = MINIMUM_CHAIN_LEN;
+
     // calculate the compressed image size
     void*  image = (void*)(loader->PEImage);
     uint32 size  = loader->ImageSize;
-    uint bakSize = runtime->Compressor.Compress(NULL, image, size, 4096);
+    uint bakSize = runtime->Compressor.Compress(NULL, image, size, window, chain);
     if (bakSize == (uint)(-1))
     {
         return false;
@@ -842,7 +856,7 @@ static bool backupPEImage(PELoader* loader)
     loader->PEBackup = mem;
 
     // save compressed PE image(mapped)
-    if (runtime->Compressor.Compress(mem, image, size, 4096) == (uint)(-1))
+    if (runtime->Compressor.Compress(mem, image, size, window, chain) == (uint)(-1))
     {
         return false;
     }
@@ -939,7 +953,7 @@ static errno cleanPELoader(PELoader* loader)
         // release memory page for PE image backup
         if (peBackup != NULL)
         {
-            runtime->Crypto.EraseBuffer(peBackup, loader->ImageSize);
+            runtime->Crypto.EraseBuffer(peBackup, loader->PEBackupSize);
             if (!virtualFree(peBackup, 0, MEM_RELEASE) && errno == NO_ERROR)
             {
                 errno = ERR_LOADER_FREE_PE_IMAGE_BACKUP;
@@ -993,6 +1007,15 @@ static bool recoverPageProtect(PELoader* loader, DWORD protect)
     DWORD   old;
     return loader->VirtualProtect((void*)begin, size, protect, &old);
 }
+
+#pragma optimize("", off)
+__declspec(noinline)
+static void cleanInitStack()
+{
+    byte data[2048];
+    mem_init(data, sizeof(data));
+}
+#pragma optimize("", on)
 
 static void setPELoaderPointer(PELoader* loader)
 {
@@ -1089,11 +1112,15 @@ void* ldr_GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
         lpProcName = GetProcedureName(pml, hModule, proc);
         if (lpProcName == NULL)
         {
+            // erase data in the large stack
+            mem_init(modName, sizeof(modName));
             return proc;
         }
     }
     // check is PE Loader internal method or need hook
     void* hook = ldr_get_hooks(modName, lpProcName);
+    // erase data in the large stack
+    mem_init(modName, sizeof(modName));
     if (hook != NULL)
     {
         return hook;
@@ -1214,8 +1241,12 @@ static void* ldr_get_hooks(LPCWSTR module, LPCSTR lpProcName)
         {
             continue;
         }
+        // erase data in the large stack
+        mem_init(list, sizeof(list));
         return item.hook;
     }
+    // erase data in the large stack
+    mem_init(list, sizeof(list));
     return NULL;
 }
 
@@ -1266,7 +1297,6 @@ static bool ldr_copy_mapped_image()
     return ldr_unlock_status();
 }
 
-// TODO rewrite it about address
 __declspec(noinline)
 static void* ldr_process_export(LPSTR name)
 {
@@ -1287,47 +1317,49 @@ static void* ldr_process_export(LPSTR name)
         return NULL;
     }
     Image_ExportDirectory* export = (Image_ExportDirectory*)(exportTable);
-    DWORD* aof = (DWORD*)(peImage + export->AddressOfFunctions);
-    DWORD* aon = (DWORD*)(peImage + export->AddressOfNames);
-    WORD*  aoo = (WORD* )(peImage + export->AddressOfNameOrdinals);
-    // try to find procedure address
-    void* address = NULL;
+    uint32* funcTable = (uint32*)(peImage + export->AddressOfFunctions);
+    uint32* nameTable = (uint32*)(peImage + export->AddressOfNames);
+    uint16* ordiTable = (uint16*)(peImage + export->AddressOfNameOrdinals);
+    // try to get function RVA
+    uint32 funcRVA = 0;
     if (name <= (LPSTR)(0xFFFF))
     {
         // get procedure address by ordinal
-        DWORD ordi = (DWORD)(uintptr)(name) - export->Base;
-        if (ordi < export->NumberOfFunctions)
+        uint16 ordinal = (uint16)(uintptr)name;
+        uint32 index   = ordinal - export->Base;
+        if (index < export->NumberOfFunctions)
         {
-            address = (void*)(peImage + (uintptr)(aof[ordi]));
+            funcRVA = funcTable[index];
         }
     } else {
         // get procedure address by name
         for (uint32 i = 0; i < export->NumberOfNames; i++)
         {
-            LPSTR fn = (LPSTR)(peImage + (uintptr)(aon[i]));
+            LPSTR fn = (LPSTR)(peImage + (uintptr)(nameTable[i]));
             if (!strequ_a(fn, name))
             {
                 continue;
             }
-            address = (void*)(peImage + (uintptr)(aof[aoo[i]]));
+            // name[i] -> ordinal[i] -> funcRVA[ordinal]
+            funcRVA = funcTable[ordiTable[i]];
             break;
         }
     }
-    if (address == NULL)
+    if (funcRVA == 0)
     {
         SetLastErrno(ERR_LOADER_PROC_NOT_EXIST);
         return NULL;
     }
     // check it is a forwarded export function
-    DWORD funcRVA = (DWORD)((uintptr)address-peImage);
     DWORD eatRVA  = (DWORD)(loader->ExportTable-peImage);
     DWORD eatSize = (DWORD)(loader->ExportTableSize);
     if (funcRVA < eatRVA || funcRVA >= eatRVA + eatSize)
     {
-        return address;
+        return (void*)(peImage + funcRVA);
     }
+    // get the export name
+    byte* exportName = (byte*)(peImage + funcRVA);
     // search the last "." in function name
-    byte* exportName = address;
     byte* src = exportName;
     uint  dot = 0;
     for (uint j = 0;; j++)
@@ -1366,6 +1398,8 @@ static void* ldr_process_export(LPSTR name)
         return NULL;
     }
     dbg_log("[PE Loader]", "LoadLibrary: %s for forwarded function", dllName);
+    // erase data in the large stack
+    mem_init(dllName, sizeof(dllName));
     LPCSTR procName = (LPCSTR)((uintptr)exportName + dot + 1);
     return ldr_GetProcAddress(hModule, procName);
 }
