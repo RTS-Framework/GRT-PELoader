@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/RTS-Framework/GRT-Develop/types"
 	"github.com/RTS-Framework/Gleam-RT/runtime"
 )
 
@@ -40,34 +41,28 @@ type Config struct {
 	CommandLineA uintptr
 	CommandLineW uintptr
 
-	// wait main thread exit if it is an exe image.
-	WaitMain bool
-
-	// if failed to load library, can continue it.
-	AllowSkipDLL bool
-
-	// create NUL file for set StdInput, StdOutput and
-	// StdError for ignore console input/output.
-	// If it is true, it will overwrite standard handles.
-	IgnoreStdIO bool
-
 	// set standard handles for hook GetStdHandle,
 	// if them are NULL, call original GetStdHandle.
 	StdInput  uintptr
 	StdOutput uintptr
 	StdError  uintptr
 
+	// wait main thread exit if it is an exe image.
+	WaitMain types.BOOL
+
+	// if failed to load library, can continue it.
+	AllowSkipDLL types.BOOL
+
+	// create NUL file for set StdInput, StdOutput and
+	// StdError for ignore console input/output.
+	// If it is true, it will overwrite standard handles.
+	IgnoreStdIO types.BOOL
+
 	// not running PE image after load.
-	NotAutoRun bool
+	NotAutoRun types.BOOL
 
 	// not stop runtime when call ExitProcess.
-	NotStopRuntime bool
-
-	// not erase instructions after call functions about Init or Exit.
-	NotEraseInstruction bool
-
-	// adjust current memory page protect.
-	NotAdjustProtect bool
+	NotStopRuntime types.BOOL
 }
 
 // PELoaderM contains exported methods of PE Loader.
@@ -79,7 +74,10 @@ type PELoaderM struct {
 	EntryPoint uintptr
 
 	// is this PE image is a DLL image.
-	IsDLL bool
+	IsDLL types.BOOL
+
+	// for structure alignment.
+	reserved uint32
 
 	// runtime mutex, need lock it before call some loader methods.
 	runtimeMu uintptr
