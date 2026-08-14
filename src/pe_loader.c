@@ -151,7 +151,7 @@ static bool  ldr_copy_mapped_image();
 static void* ldr_process_export(LPSTR name);
 static bool  ldr_process_import();
 static bool  ldr_process_delay_import();
-static errno ldr_start_process();
+static errno ldr_run_image();
 static void  ldr_alloc_tls_block();
 static void  ldr_free_tls_block();
 static void  ldr_tls_callback(DWORD dwReason);
@@ -161,14 +161,14 @@ static void  ldr_exit_process(UINT uExitCode);
 static void  ldr_pointer_stub();
 static void  ldr_epilogue();
 
-static void pe_entry_point();
+static uint pe_entry_point(LPVOID lpParam);
 static bool pe_dll_main(DWORD dwReason, bool setExitCode);
 static void set_exit_code(uint code);
 static void set_running(bool run);
 static bool is_running();
 static void clean_run_data();
 static void reset_handler();
-static uint restart_image();
+static uint restart_image(LPVOID lpParam);
 
 // hooks about kernel32.dll
 LPSTR   hook_GetCommandLineA();
@@ -1542,7 +1542,7 @@ static bool ldr_process_delay_import()
 }
 
 __declspec(noinline)
-static errno ldr_start_process()
+static errno ldr_run_image()
 {
     PELoader* loader = getPELoaderPointer();
 
@@ -1625,11 +1625,8 @@ static void ldr_alloc_tls_block()
     mem_copy(tls, loader->TLSBlock, loader->TLSLen);
 
     // read the original TLS block address
-#ifdef _WIN64
-    uintptr* tlsPtr = (uintptr*)(__readgsqword(0x58));
-#elif _WIN32
-    uintptr* tlsPtr = (uintptr*)(__readfsdword(0x2C));
-#endif
+    TEB* teb = runtime->Env.GetTEB();
+    uintptr* tlsPtr = teb->ThreadLocalStoragePointer;
 
     // store the original TLS block address
     uintptr block = *tlsPtr;
@@ -1653,11 +1650,8 @@ static void ldr_free_tls_block()
     }
 
     // read the hooked TLS block address
-#ifdef _WIN64
-    uintptr* tlsPtr = (uintptr*)(__readgsqword(0x58));
-#elif _WIN32
-    uintptr* tlsPtr = (uintptr*)(__readfsdword(0x2C));
-#endif
+    TEB* teb = runtime->Env.GetTEB();
+    uintptr* tlsPtr = teb->ThreadLocalStoragePointer;
 
     // read the original TLS block address
     void* tls = (void*)(*tlsPtr - 16);
@@ -1944,6 +1938,11 @@ HANDLE stub_CreateThread(
         lpThreadAttributes, dwStackSize, addr,
         parameter, dwCreationFlags, lpThreadId
     );
+    if (hThread == NULL)
+    {
+        runtime->Memory.Free(parameter);
+        return NULL;
+    }
     return hThread;
 }
 
@@ -2026,7 +2025,7 @@ void hook_ExitProcess(UINT uExitCode)
     PELoader*  loader  = getPELoaderPointer();
     Runtime_M* runtime = loader->Runtime;
 
-    dbg_log("[PE Loader]", "ExitProcess: %zu", uExitCode);
+    dbg_log("[PE Loader]", "ExitProcess: %d", uExitCode);
 
     if (!runtime->Thread.KillAll())
     {
@@ -2480,7 +2479,7 @@ void loadCommandLineToArgv()
 }
 
 __declspec(noinline)
-static void pe_entry_point()
+static uint pe_entry_point(LPVOID lpParam)
 {
     PELoader* loader = getPELoaderPointer();
 
@@ -2495,6 +2494,9 @@ static void pe_entry_point()
 
     // exit process
     hook_ExitProcess((UINT)exitCode);
+
+    (void)lpParam; // ignored
+    return 0;
 }
 
 __declspec(noinline)
@@ -2600,7 +2602,7 @@ static void reset_handler()
 }
 
 __declspec(noinline)
-static uint restart_image()
+static uint restart_image(LPVOID lpParam)
 {
     dbg_log("[PE Loader]", "restart PE image");
 
@@ -2618,6 +2620,8 @@ static uint restart_image()
     {
         dbg_log("[PE Loader]", "unexpected exit code: 0x%X", errno);
     }
+
+    (void)lpParam; // ignored
     return 0;
 }
 
@@ -2695,7 +2699,7 @@ errno LDR_Start()
             errno = ERR_LOADER_NOT_EXE_IMAGE;
             break;
         }
-        errno = ldr_start_process();
+        errno = ldr_run_image();
         break;
     }
 
@@ -2763,7 +2767,7 @@ errno LDR_Execute()
     errno  errno   = NO_ERROR;
     for (;;)
     {
-        errno = ldr_start_process();
+        errno = ldr_run_image();
         if (errno != NO_ERROR)
         {
             break;
