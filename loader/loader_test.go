@@ -16,27 +16,29 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/require"
 
+	"github.com/RTS-Framework/GRT-Develop/instance"
+	"github.com/RTS-Framework/GRT-Develop/types"
 	"github.com/RTS-Framework/Gleam-RT/runtime"
 )
 
 var (
-	testTrimLDRx86 []byte
-	testTrimLDRx64 []byte
+	testModuleX86 []byte
+	testModuleX64 []byte
 )
 
 func init() {
 	var err error
-	testTrimLDRx86, err = os.ReadFile("../dist/trim/PELoader_x86.bin")
+	testModuleX86, err = os.ReadFile("../dist/module/PELoader_x86.bin")
 	if err != nil {
 		panic(err)
 	}
-	testTrimLDRx64, err = os.ReadFile("../dist/trim/PELoader_x64.bin")
+	testModuleX64, err = os.ReadFile("../dist/module/PELoader_x64.bin")
 	if err != nil {
 		panic(err)
 	}
 }
 
-func TestPELoader(t *testing.T) {
+func TestStandard(t *testing.T) {
 	t.Run("exe", func(t *testing.T) {
 		var image Image
 		switch runtime.GOARCH {
@@ -69,7 +71,7 @@ func TestPELoader(t *testing.T) {
 		require.NoError(t, err)
 
 		addr := loadInstance(t, inst)
-		ptr, _, err := syscallN(addr)
+		ptr, _, err := syscallN(addr, 0)
 		require.NotEqual(t, uintptr(0), ptr, err)
 		PELoaderM := NewPELoader(ptr)
 		spew.Dump(PELoaderM)
@@ -87,7 +89,7 @@ func TestPELoader(t *testing.T) {
 		require.NoError(t, err)
 
 		addr := loadInstance(t, inst)
-		ptr, _, err := syscallN(addr)
+		ptr, _, err := syscallN(addr, 0)
 		require.NotEqual(t, uintptr(0), ptr, err)
 		PELoaderM := NewPELoader(ptr)
 		spew.Dump(PELoaderM)
@@ -116,19 +118,20 @@ func TestPELoader(t *testing.T) {
 		}
 
 		opts := &Options{
-			ImageName:   "test.exe",
-			WaitMain:    true,
-			IgnoreStdIO: true,
+			ImageName: "test.exe",
 
 			StdInput:  1, // will be overwritten
 			StdOutput: 2, // will be overwritten
 			StdError:  3, // will be overwritten
+
+			WaitMain:    true,
+			IgnoreStdIO: true,
 		}
 		inst, err := CreateInstance(runtime.GOARCH, image, opts)
 		require.NoError(t, err)
 
 		addr := loadInstance(t, inst)
-		ptr, _, err := syscallN(addr)
+		ptr, _, err := syscallN(addr, 0)
 		require.NotEqual(t, uintptr(0), ptr, err)
 	})
 
@@ -153,7 +156,7 @@ func TestPELoader(t *testing.T) {
 		require.NoError(t, err)
 
 		addr := loadInstance(t, inst)
-		ptr, _, err := syscallN(addr)
+		ptr, _, err := syscallN(addr, 0)
 		require.NotEqual(t, uintptr(0), ptr, err)
 		PELoaderM := NewPELoader(ptr)
 		spew.Dump(PELoaderM)
@@ -167,7 +170,11 @@ func TestPELoader(t *testing.T) {
 	})
 }
 
-func TestTrimmedPELoader(t *testing.T) {
+func TestPipeline(t *testing.T) {
+
+}
+
+func TestModule(t *testing.T) {
 	// process Gleam-RT instruction
 	var (
 		ldr  []byte
@@ -176,10 +183,10 @@ func TestTrimmedPELoader(t *testing.T) {
 	)
 	switch runtime.GOARCH {
 	case "386":
-		ldr = testTrimLDRx86
+		ldr = testModuleX86
 		data, err = os.ReadFile("../asm/inst/runtime_x86.inst")
 	case "amd64":
-		ldr = testTrimLDRx64
+		ldr = testModuleX64
 		data, err = os.ReadFile("../asm/inst/runtime_x64.inst")
 	default:
 		t.Fatal("unsupported architecture")
@@ -192,7 +199,9 @@ func TestTrimmedPELoader(t *testing.T) {
 	s = strings.ReplaceAll(s, "h", "")
 	s = strings.ReplaceAll(s, " ", "")
 	s = strings.ReplaceAll(s, "\r\n", "")
-	rt, err := hex.DecodeString(s)
+	tpl, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	rt, err := instance.Instantiate(tpl, nil)
 	require.NoError(t, err)
 
 	t.Run("exe", func(t *testing.T) {
@@ -212,9 +221,9 @@ func TestTrimmedPELoader(t *testing.T) {
 		}
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:  RuntimeM.HashAPI.FindAPI,
+			FindAPI:  RuntimeM.HashAPI.FindAPIMA,
 			Image:    (uintptr)(unsafe.Pointer(&pe[0])),
-			WaitMain: true,
+			WaitMain: types.TRUE,
 		}
 
 		// initialize PELoader
@@ -241,9 +250,9 @@ func TestTrimmedPELoader(t *testing.T) {
 		pe, err := os.ReadFile("C:\\Windows\\System32\\ws2_32.dll")
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:      RuntimeM.HashAPI.FindAPI,
+			FindAPI:      RuntimeM.HashAPI.FindAPIMA,
 			Image:        (uintptr)(unsafe.Pointer(&pe[0])),
-			AllowSkipDLL: true,
+			AllowSkipDLL: types.TRUE,
 		}
 
 		// initialize PELoader
@@ -285,10 +294,10 @@ func TestTrimmedPELoader(t *testing.T) {
 		}
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:     RuntimeM.HashAPI.FindAPI,
+			FindAPI:     RuntimeM.HashAPI.FindAPIMA,
 			Image:       (uintptr)(unsafe.Pointer(&pe[0])),
-			WaitMain:    true,
-			IgnoreStdIO: true,
+			WaitMain:    types.TRUE,
+			IgnoreStdIO: types.TRUE,
 
 			StdInput:  1, // will be overwritten
 			StdOutput: 2, // will be overwritten
@@ -325,9 +334,9 @@ func TestTrimmedPELoader(t *testing.T) {
 		}
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:        RuntimeM.HashAPI.FindAPI,
+			FindAPI:        RuntimeM.HashAPI.FindAPIMA,
 			Image:          (uintptr)(unsafe.Pointer(&pe[0])),
-			NotStopRuntime: true,
+			NotStopRuntime: types.TRUE,
 		}
 
 		// initialize PELoader
@@ -363,11 +372,11 @@ func TestTrimmedPELoader(t *testing.T) {
 		}
 		require.NoError(t, err)
 
-		cmdLine := "-kick 50\x00"
-		cmdLineA := []byte(cmdLine)
-		cmdLineW := []byte(stringToUTF16(cmdLine))
+		cmdLine := "-kick 50"
+		cmdLineA := []byte(cmdLine + "\x00")
+		cmdLineW := types.StringToUTF16(cmdLine)
 		config := Config{
-			FindAPI:      RuntimeM.HashAPI.FindAPI,
+			FindAPI:      RuntimeM.HashAPI.FindAPIMA,
 			Image:        (uintptr)(unsafe.Pointer(&pe[0])),
 			CommandLineA: (uintptr)(unsafe.Pointer(&cmdLineA[0])),
 			CommandLineW: (uintptr)(unsafe.Pointer(&cmdLineW[0])),
