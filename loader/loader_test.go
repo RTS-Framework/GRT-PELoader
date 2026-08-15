@@ -4,6 +4,7 @@ package loader
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -22,12 +23,22 @@ import (
 )
 
 var (
-	testModuleX86 []byte
-	testModuleX64 []byte
+	testPipelineX86 []byte
+	testPipelineX64 []byte
+	testModuleX86   []byte
+	testModuleX64   []byte
 )
 
 func init() {
 	var err error
+	testPipelineX86, err = os.ReadFile("../dist/pipeline/PELoader_x86.bin")
+	if err != nil {
+		panic(err)
+	}
+	testPipelineX64, err = os.ReadFile("../dist/pipeline/PELoader_x64.bin")
+	if err != nil {
+		panic(err)
+	}
 	testModuleX86, err = os.ReadFile("../dist/module/PELoader_x86.bin")
 	if err != nil {
 		panic(err)
@@ -76,7 +87,7 @@ func TestStandard(t *testing.T) {
 		PELoaderM := NewPELoader(ptr)
 		spew.Dump(PELoaderM)
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(5 * time.Second)
 	})
 
 	t.Run("dll", func(t *testing.T) {
@@ -171,28 +182,101 @@ func TestStandard(t *testing.T) {
 }
 
 func TestPipeline(t *testing.T) {
-
-}
-
-func TestModule(t *testing.T) {
-	// process Gleam-RT instruction
+	// process loader template
 	var (
-		ldr  []byte
-		data []byte
-		err  error
+		ldr []byte
+		rti []byte
+		err error
 	)
 	switch runtime.GOARCH {
 	case "386":
-		ldr = testModuleX86
-		data, err = os.ReadFile("../asm/inst/runtime_x86.inst")
+		ldr = testPipelineX86
+		rti, err = os.ReadFile("../asm/inst/runtime_x86.inst")
 	case "amd64":
-		ldr = testModuleX64
-		data, err = os.ReadFile("../asm/inst/runtime_x64.inst")
+		ldr = testPipelineX64
+		rti, err = os.ReadFile("../asm/inst/runtime_x64.inst")
 	default:
 		t.Fatal("unsupported architecture")
 	}
 	require.NoError(t, err)
-	s := string(data)
+	s := string(rti)
+	s = strings.ReplaceAll(s, ",", "")
+	s = strings.ReplaceAll(s, " 0", "")
+	s = strings.ReplaceAll(s, "db", "")
+	s = strings.ReplaceAll(s, "h", "")
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, "\r\n", "")
+	rt, err := hex.DecodeString(s)
+	require.NoError(t, err)
+
+	// build loader template for pipeline
+	template := append(bytes.Clone(ldr), rt...)
+	instOpts := instance.Options{
+		SkipArguments: true,
+	}
+	template, err = instance.Instantiate(template, &instOpts)
+	require.NoError(t, err)
+
+	t.Run("exe", func(t *testing.T) {
+		var image Image
+		switch runtime.GOARCH {
+		case "386":
+			image = NewFile("../test/image/x86/rust_msvc.exe")
+		case "amd64":
+			image = NewFile("../test/image/x64/rust_msvc.exe")
+		default:
+			t.Fatal("unsupported architecture")
+		}
+
+		r, w, err := os.Pipe()
+		require.NoError(t, err)
+		go func() {
+			reader := bufio.NewScanner(r)
+			for reader.Scan() {
+				fmt.Println(reader.Text())
+			}
+		}()
+
+		opts := &Options{
+			Template: template,
+
+			ImageName: "test.exe",
+			WaitMain:  true,
+
+			StdInput:  0,
+			StdOutput: uint64(w.Fd()),
+			StdError:  uint64(w.Fd()),
+
+			IgnoreInstOpts: true,
+		}
+		inst, err := CreateInstance(runtime.GOARCH, image, opts)
+		require.NoError(t, err)
+
+		addr := loadInstance(t, inst)
+		ptr, _, err := syscallN(addr, 0)
+		require.NotEqual(t, uintptr(0), ptr, err)
+	})
+}
+
+func TestModule(t *testing.T) {
+	// process Gleam-RT instance
+	var (
+		ldr []byte
+		rti []byte
+		err error
+	)
+	switch runtime.GOARCH {
+	case "386":
+		ldr = testModuleX86
+		rti, err = os.ReadFile("../asm/inst/runtime_x86.inst")
+	case "amd64":
+		ldr = testModuleX64
+		rti, err = os.ReadFile("../asm/inst/runtime_x64.inst")
+	default:
+		t.Fatal("unsupported architecture")
+	}
+	require.NoError(t, err)
+	s := string(rti)
 	s = strings.ReplaceAll(s, ",", "")
 	s = strings.ReplaceAll(s, " 0", "")
 	s = strings.ReplaceAll(s, "db", "")
@@ -221,8 +305,9 @@ func TestModule(t *testing.T) {
 		}
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:  RuntimeM.HashAPI.FindAPIMA,
-			Image:    (uintptr)(unsafe.Pointer(&pe[0])),
+			FindAPI: RuntimeM.HashAPI.FindAPIMA,
+			Image:   (uintptr)(unsafe.Pointer(&pe[0])),
+
 			WaitMain: types.TRUE,
 		}
 
@@ -250,8 +335,9 @@ func TestModule(t *testing.T) {
 		pe, err := os.ReadFile("C:\\Windows\\System32\\ws2_32.dll")
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:      RuntimeM.HashAPI.FindAPIMA,
-			Image:        (uintptr)(unsafe.Pointer(&pe[0])),
+			FindAPI: RuntimeM.HashAPI.FindAPIMA,
+			Image:   (uintptr)(unsafe.Pointer(&pe[0])),
+
 			AllowSkipDLL: types.TRUE,
 		}
 
@@ -294,8 +380,9 @@ func TestModule(t *testing.T) {
 		}
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:     RuntimeM.HashAPI.FindAPIMA,
-			Image:       (uintptr)(unsafe.Pointer(&pe[0])),
+			FindAPI: RuntimeM.HashAPI.FindAPIMA,
+			Image:   (uintptr)(unsafe.Pointer(&pe[0])),
+
 			WaitMain:    types.TRUE,
 			IgnoreStdIO: types.TRUE,
 
@@ -334,8 +421,9 @@ func TestModule(t *testing.T) {
 		}
 		require.NoError(t, err)
 		config := Config{
-			FindAPI:        RuntimeM.HashAPI.FindAPIMA,
-			Image:          (uintptr)(unsafe.Pointer(&pe[0])),
+			FindAPI: RuntimeM.HashAPI.FindAPIMA,
+			Image:   (uintptr)(unsafe.Pointer(&pe[0])),
+
 			NotStopRuntime: types.TRUE,
 		}
 
@@ -376,8 +464,9 @@ func TestModule(t *testing.T) {
 		cmdLineA := []byte(cmdLine + "\x00")
 		cmdLineW := types.StringToUTF16(cmdLine)
 		config := Config{
-			FindAPI:      RuntimeM.HashAPI.FindAPIMA,
-			Image:        (uintptr)(unsafe.Pointer(&pe[0])),
+			FindAPI: RuntimeM.HashAPI.FindAPIMA,
+			Image:   (uintptr)(unsafe.Pointer(&pe[0])),
+
 			CommandLineA: (uintptr)(unsafe.Pointer(&cmdLineA[0])),
 			CommandLineW: (uintptr)(unsafe.Pointer(&cmdLineW[0])),
 		}
