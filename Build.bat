@@ -7,27 +7,30 @@ if "%VisualStudio%" == "" (
 )
 call "%VisualStudio%\VC\Auxiliary\Build\vcvars64.bat"
 
-echo ===================== clean old files ====================
+echo ================== clean outdated dist ===================
+del /S /Q dist
+
+echo =============== clean outdated build files ===============
+rd /S /Q "Release"
+rd /S /Q "x64"
 rd /S /Q "builder\Release"
 rd /S /Q "builder\x64"
 rd /S /Q "cutter\Release"
 rd /S /Q "cutter\x64"
-rd /S /Q "Release"
-rd /S /Q "x64"
 
-echo ======================== generate ========================
+echo ==================== generate builder ====================
 MSBuild.exe GRT-PELoader.sln /t:builder /p:Configuration=Release /p:Platform=x86
 MSBuild.exe GRT-PELoader.sln /t:builder /p:Configuration=Release /p:Platform=x64
+
+echo ==================== generate cutter =====================
 MSBuild.exe GRT-PELoader.sln /t:cutter /p:Configuration=Release /p:Platform=x86
 MSBuild.exe GRT-PELoader.sln /t:cutter /p:Configuration=Release /p:Platform=x64
 
-echo =============== extract PE Loader shellcode ==============
-del /S /Q dist
-
+echo =============== extract PE Loader template ===============
 cd builder
-echo --------extract shellcode for x86--------
+echo --------extract template for x86--------
 "..\Release\builder.exe"
-echo --------extract shellcode for x64--------
+echo --------extract template for x64--------
 "..\x64\Release\builder.exe"
 cd ..
 
@@ -38,23 +41,29 @@ echo ----------cut PE Loader for x64----------
 "..\x64\Release\cutter.exe"
 cd ..
 
-echo ===================== copy shellcode =====================
-copy /Y dist\*.bin loader\template
+echo ================= copy standard template =================
+copy /Y dist\standard\*.bin loader\template
 
-echo =================== clean output files ===================
+echo =================== clean build files ====================
+rd /S /Q "Release"
+rd /S /Q "x64"
 rd /S /Q "builder\Release"
 rd /S /Q "builder\x64"
 rd /S /Q "cutter\Release"
 rd /S /Q "cutter\x64"
-rd /S /Q "Release"
-rd /S /Q "x64"
 
 echo ================ generate assembly module ================
 go run dump.go
 
-echo ===================== test shellcode =====================
+echo =================== test loader package ==================
 call test.bat
+if errorlevel 1 (
+    echo.
+    echo failed to test loader package!
+    exit /b %ERRORLEVEL%
+)
 
 echo ==========================================================
-echo                  build shellcode finish!
+echo                 build template finish!
 echo ==========================================================
+pause
