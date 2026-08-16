@@ -17,7 +17,9 @@ var (
 
 func main() {
 	redirected := procVirtualAlloc.Addr()
-	original, err := gleamrt.GetProcAddressOriginal(modKernel32.Handle(), "VirtualAlloc")
+
+	hKernel32 := windows.Handle(modKernel32.Handle())
+	original, err := gleamrt.GetProcAddressRaw(hKernel32, "VirtualAlloc")
 	if err != nil {
 		log.Fatal(err)
 	}
