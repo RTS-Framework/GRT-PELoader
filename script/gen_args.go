@@ -32,7 +32,7 @@ func main() {
 
 	data := dumpBytesHex(stub)
 	fmt.Println(data)
-	err = os.WriteFile("../asm/inst/argument_x86.inst", []byte(data), 0644)
+	err = os.WriteFile("../asm/inst/argument_x86.inst", []byte(data), 0600)
 	checkError(err)
 
 	cmdline = "test_x64.exe -arg 11"
@@ -56,7 +56,7 @@ func main() {
 
 	data = dumpBytesHex(stub)
 	fmt.Println(data)
-	err = os.WriteFile("../asm/inst/argument_x64.inst", []byte(data), 0644)
+	err = os.WriteFile("../asm/inst/argument_x64.inst", []byte(data), 0600)
 	checkError(err)
 }
 
