@@ -9,7 +9,7 @@
 
 // NOT using stdio is to ensure that no runtime instructions
 // are introduced to avoid compiler optimization link errors
-// that cause the extracted shellcode to contain incorrect
+// that cause the extracted module to contain incorrect
 // relative/absolute memory addresses.
 
 static LoadLibraryA_t LoadLibraryA;
@@ -44,11 +44,11 @@ int EntryPoint()
     uintptr end   = (uintptr)(&Epilogue);
     uintptr size  = end - begin;
 
-    // extract shellcode and save to file
+    // extract module and save to file
 #ifdef _WIN64
-    LPSTR path = "../dist/trim/PELoader_x64.bin";
+    LPSTR path = "../dist/module/PELoader_x64.bin";
 #elif _WIN32
-    LPSTR path = "../dist/trim/PELoader_x86.bin";
+    LPSTR path = "../dist/module/PELoader_x86.bin";
 #endif
     HANDLE hFile = CreateFileA(
         path, GENERIC_WRITE, 0, NULL, 
@@ -61,7 +61,7 @@ int EntryPoint()
     }
     if (!WriteFile(hFile, (byte*)begin, (DWORD)size, NULL, NULL))
     {
-        printf_s("failed to write shellcode: 0x%X\n", GetLastErrno());
+        printf_s("failed to write module: 0x%X\n", GetLastErrno());
         return 2;
     }
     if (!CloseHandle(hFile))
@@ -70,6 +70,6 @@ int EntryPoint()
         return 3;
     }
 
-    printf_s("cut shellcode successfully\n");
+    printf_s("cut module successfully\n");
     return 0;
 }
