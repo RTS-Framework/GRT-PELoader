@@ -7,9 +7,15 @@
 #include "pe_loader.h"
 #include "boot.h"
 
+// a flag for calculate offset to Argument_Stub
+#pragma warning(push)
+#pragma warning(disable: 4276)
+extern void Argument_Stub();
+#pragma warning(pop)
+
 // NOT using stdio is to ensure that no runtime instructions
 // are introduced to avoid compiler optimization link errors
-// that cause the extracted shellcode to contain incorrect
+// that cause the extracted template to contain incorrect
 // relative/absolute memory addresses.
 
 static LoadLibraryA_t LoadLibraryA;
@@ -20,8 +26,9 @@ static CloseHandle_t  CloseHandle;
 typedef int (*printf_s_t)(const char* format, ...);
 static printf_s_t printf_s;
 
-bool saveShellcode();
-bool testShellcode();
+bool saveStandard();
+bool savePipeline();
+bool saveTemplate(LPSTR path, void* data, uint size);
 
 static void init()
 {
@@ -42,47 +49,46 @@ static void init()
 int EntryPoint()
 {
     init();
-    if (!saveShellcode())
+    if (!saveStandard())
     {
         return 1;
     }
-    if (!testShellcode())
+    if (!savePipeline())
     {
         return 2;
     }
-    printf_s("build shellcode successfully\n");
+    printf_s("build template successfully\n");
     return 0;
 }
 
-bool saveShellcode()
+bool saveStandard()
 {
+#ifdef _WIN64
+    LPSTR path = "../dist/standard/PELoader_x64.bin";
+#elif _WIN32
+    LPSTR path = "../dist/standard/PELoader_x86.bin";
+#endif
     uintptr begin = (uintptr)(&Boot);
     uintptr end   = (uintptr)(&Argument_Stub);
     uintptr size  = end - begin;
+    return saveTemplate(path, (byte*)begin, size);
+}
 
-    // check runtime option stub is valid
-    end -= OPTION_STUB_SIZE;
-    if (*(byte*)end != OPTION_STUB_MAGIC)
-    {
-        printf_s("invalid runtime option stub\n");
-        return false;
-    }
-    for (uintptr i = 0; i < OPTION_STUB_SIZE - 1; i++)
-    {
-        end++;
-        if (*(byte*)(end) != 0x00)
-        {
-            printf_s("invalid runtime option stub\n");
-            return false;
-        }
-    }
-
-    // extract shellcode and save to file
+bool savePipeline()
+{
 #ifdef _WIN64
-    LPSTR path = "../dist/PELoader_x64.bin";
+    LPSTR path = "../dist/pipeline/PELoader_x64.bin";
 #elif _WIN32
-    LPSTR path = "../dist/PELoader_x86.bin";
+    LPSTR path = "../dist/pipeline/PELoader_x86.bin";
 #endif
+    uintptr begin = (uintptr)(&Boot);
+    uintptr end   = (uintptr)(&InitRuntime);
+    uintptr size  = end - begin;
+    return saveTemplate(path, (byte*)begin, size);
+}
+
+bool saveTemplate(LPSTR path, void* data, uint size)
+{
     HANDLE hFile = CreateFileA(
         path, GENERIC_WRITE, 0, NULL, 
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL
@@ -92,31 +98,14 @@ bool saveShellcode()
         printf_s("failed to create output file: 0x%X\n", GetLastErrno());
         return false;
     }
-    if (!WriteFile(hFile, (byte*)begin, (DWORD)size, NULL, NULL))
+    if (!WriteFile(hFile, data, (DWORD)size, NULL, NULL))
     {
-        printf_s("failed to write shellcode: 0x%X\n", GetLastErrno());
+        printf_s("failed to write template: 0x%X\n", GetLastErrno());
         return false;
     }
     if (!CloseHandle(hFile))
     {
         printf_s("failed to close file: 0x%X\n", GetLastErrno());
-        return false;
-    }
-    return true;
-}
-
-bool testShellcode()
-{
-    PELoader_M* pe_loader = Boot();
-    if (pe_loader != NULL)
-    {
-        printf_s("unexpected boot return value\n");
-        return false;
-    }
-    errno errno = GetLastErrno();
-    if (errno != ERR_INVALID_LOAD_MODE)
-    {
-        printf_s("unexpected boot errno: 0x%X\n", errno);
         return false;
     }
     return true;
