@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"testing"
 
 	"github.com/For-ACGN/LZSS"
@@ -87,20 +86,15 @@ func TestEmbedInstance(t *testing.T) {
 		return
 	}
 
-	wg := sync.WaitGroup{}
-	t.Run("x86", func(t *testing.T) {
-		if runtime.GOARCH != "386" {
-			return
-		}
-
-		for _, item := range images {
-			path := filepath.Join("../test/image/x86", item.path)
+	test := func(dir string) {
+		for _, item := range testImages {
+			path := filepath.Join(dir, item)
 			image, err := os.ReadFile(path)
 			require.NoError(t, err)
 			opts := &Options{
 				ImageName:    "test.exe",
 				CommandLine:  "-p1 123 -p2 \"hello\"",
-				WaitMain:     item.wait,
+				WaitMain:     true,
 				AllowSkipDLL: true,
 			}
 
@@ -113,57 +107,27 @@ func TestEmbedInstance(t *testing.T) {
 			for _, img := range []Image{
 				embed1, embed2, embed3,
 			} {
-				wg.Add(1)
-				go func(img Image) {
-					defer wg.Done()
-					inst, err := CreateInstance("386", img, opts)
-					require.NoError(t, err)
+				inst, err := CreateInstance(runtime.GOARCH, img, opts)
+				require.NoError(t, err)
 
-					addr := loadInstance(t, inst)
-					ret, _, _ := syscallN(addr)
-					require.NotEqual(t, uintptr(0), ret)
-				}(img)
+				addr := loadInstance(t, inst)
+				ret, _, _ := syscallN(addr, 0)
+				require.Equal(t, uintptr(1), ret, err)
 			}
 		}
+	}
+
+	t.Run("x86", func(t *testing.T) {
+		if runtime.GOARCH != "386" {
+			return
+		}
+		test("../test/image/x86")
 	})
 
 	t.Run("x64", func(t *testing.T) {
 		if runtime.GOARCH != "amd64" {
 			return
 		}
-
-		for _, item := range images {
-			path := filepath.Join("../test/image/x64", item.path)
-			image, err := os.ReadFile(path)
-			require.NoError(t, err)
-			opts := &Options{
-				ImageName:    "test.exe",
-				CommandLine:  "-p1 123 -p2 \"hello\"",
-				WaitMain:     item.wait,
-				AllowSkipDLL: true,
-			}
-
-			preCompressed, err := lzss.Compress(image, 2048)
-			require.NoError(t, err)
-			embed1 := NewEmbed(image)
-			embed2 := NewEmbedCompress(image, 2048)
-			embed3 := NewEmbedPreCompress(preCompressed)
-
-			for _, img := range []Image{
-				embed1, embed2, embed3,
-			} {
-				wg.Add(1)
-				go func(img Image) {
-					defer wg.Done()
-					inst, err := CreateInstance("amd64", img, opts)
-					require.NoError(t, err)
-
-					addr := loadInstance(t, inst)
-					ret, _, _ := syscallN(addr)
-					require.NotEqual(t, uintptr(0), ret)
-				}(img)
-			}
-		}
+		test("../test/image/x64")
 	})
-	wg.Wait()
 }
