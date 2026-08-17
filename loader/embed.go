@@ -26,8 +26,8 @@ import (
 const modeEmbed = 1
 
 const (
-	disableCompress = 0
-	enableCompress  = 1
+	enableCompression  = 1
+	disableCompression = 0
 )
 
 // Embed is the embed mode.
@@ -80,13 +80,13 @@ func (e *Embed) Encode() ([]byte, error) {
 	// need use compress mode
 	if !e.compress {
 		size := binary.LittleEndian.AppendUint32(nil, uint32(len(e.image))) // #nosec
-		buffer.WriteByte(disableCompress)
+		buffer.WriteByte(disableCompression)
 		buffer.Write(size)
 		buffer.Write(e.image)
 		return buffer.Bytes(), nil
 	}
 	// set the compressed flag
-	buffer.WriteByte(enableCompress)
+	buffer.WriteByte(enableCompression)
 	// compress PE image
 	var compressed []byte
 	if !e.preCompress {
