@@ -17,7 +17,8 @@
 #define HMODULE_GLEAM_RT ((HMODULE)(0x00001234))
 typedef struct {
     int64 NumModules;
-    int64 NumProcedures;
+    int64 NumLoadCalls;
+    int64 NumFreeCalls;
 } LT_Status;
 #endif // MOD_LIBRARY_H
 
@@ -35,6 +36,9 @@ typedef struct {
     int64 NumRegions;
     int64 NumPages;
     int64 NumHeaps;
+    int64 NumRWXs;
+    int64 TotalAlloc;
+    int64 PeakAlloc;
 } MT_Status;
 #endif // MOD_MEMORY_H
 
@@ -54,11 +58,14 @@ typedef BOOL  (*MemFreeAllMu_t)();
 typedef struct {
     int64 NumThreads;
     int64 NumTLSIndex;
-    int64 NumSuspend;
+    int64 NumCreated;
+    int64 NumExited;
+    int64 NumLocked;
+    int64 NumSuspended;
 } TT_Status;
 #endif // MOD_THREAD_H
 
-typedef HANDLE (*ThdNew_t)(void* address, void* parameter, BOOL track);
+typedef HANDLE (*ThdNew_t)(ThreadProc_t address, LPVOID parameter, BOOL track);
 typedef void   (*ThdExit_t)();
 typedef BOOL   (*ThdLockThread_t)(DWORD id);
 typedef BOOL   (*ThdUnlockThread_t)(DWORD id);
@@ -94,19 +101,36 @@ typedef BOOL (*ResGetStatus_t)(RT_Status* status);
 typedef BOOL (*ResFreeAllMu_t)();
 
 // about argument store
+#ifndef MOD_ARGUMENT_H
+typedef struct {
+    int32 NumItems;
+    int32 NumErased;
+    int64 TotalSize;
+} AS_Status;
+#endif // MOD_ARGUMENT_H
+
 // GetValue: if value is NULL, size must not NULL for receive argument size.
 typedef BOOL (*ArgGetValue_t)(uint32 id, void* value, uint32* size);
 typedef BOOL (*ArgGetPointer_t)(uint32 id, void** pointer, uint32* size);
 typedef BOOL (*ArgErase_t)(uint32 id);
 typedef void (*ArgEraseAll_t)();
+typedef BOOL (*ArgGetStatus_t)(AS_Status* status);
 
 // about in-memory storage
+#ifndef MOD_STORAGE_H
+typedef struct {
+    int64 NumItems;
+    int64 TotalSize;
+} IS_Status;
+#endif // MOD_STORAGE_H
+
 // GetValue: if value is NULL, size must not NULL for receive data size.
 typedef BOOL (*ImsSetValue_t)(int id, void* value, uint size);
 typedef BOOL (*ImsGetValue_t)(int id, void* value, uint* size);
 typedef BOOL (*ImsGetPointer_t)(int id, void** pointer, uint* size);
 typedef BOOL (*ImsDelete_t)(int id);
 typedef BOOL (*ImsDeleteAll_t)();
+typedef BOOL (*ImsGetStatus_t)(IS_Status* status);
 
 // about WinBase
 // The buffer allocated from methods must call Runtime_M.Memory.Free().
@@ -140,9 +164,9 @@ typedef struct {
     UTF16  ProxyURL;       // http://www.example.com:8080
     UTF16  ProxyUser;      // proxy server username
     UTF16  ProxyPass;      // proxy server password
-    uint32 ConnectTimeout; // milliseconds, default is 60s
-    uint32 SendTimeout;    // milliseconds, default is 600s
-    uint32 ReceiveTimeout; // milliseconds, default is 600s
+    uint32 ConnectTimeout; // milliseconds, default is 120s
+    uint32 SendTimeout;    // milliseconds, default is 300s
+    uint32 ReceiveTimeout; // milliseconds, default is 300s
     uint32 MaxBodySize;    // zero is no limit
     uint8  AccessType;     // reference document about WinHttpOpen
 
@@ -213,10 +237,10 @@ typedef errno (*CryptoFreeDLL_t)();
 // =================================Runtime=================================
 
 // about random module
-// 
+//
 // RandIntX maybe return negative value.
 // RandXxxN is used to generate random value in [0, n).
-// 
+//
 // RandSequence is used to generate random sequence with range.
 // example: RandSequence(array, 4) will set array like [0, 3, 1, 2]
 
@@ -248,7 +272,7 @@ typedef void   (*RandBuffer_t)(void* buf, int64 size);
 typedef void   (*RandSequence_t)(int* array, int n);
 
 // about encoding module
-// 
+//
 // if dst is NULL, it only calculate the output length.
 // it will return -1 when call Decode with invalid data.
 typedef uint (*HexEncode_t)(void* src, uint len, byte* dst);
@@ -302,7 +326,7 @@ typedef void (*EraseInstruction_t)(void* buf, uint size);
 //
 // If return value is -1, window size or chain length is invalid.
 // If dst is NULL, calculate the compressed length.
-// 
+//
 // Decompress is used to decompress data with LZSS.
 // If return value is -1, the compressed data is invalid.
 // If dst is NULL, calculate the raw data length.
@@ -403,6 +427,7 @@ typedef struct {
     BOOL  InVirtualMachine;
     BOOL  IsAccelerated;
     int32 SafeRank;
+    int64 NumDetectCalls;
 } DT_Status;
 #endif // DETECTOR_H
 
@@ -477,7 +502,7 @@ typedef PEB* (*GetPEB_t)(); // get stored PEB address
 typedef PML* (*GetPML_t)(); // get stored process module list
 
 // get immutable module handle like "kernel32.dll".
-typedef HMODULE (*GetDLL_t)(); 
+typedef HMODULE (*GetDLL_t)();
 
 // about runtime core methods
 //
@@ -506,22 +531,54 @@ typedef struct {
 } Runtime_Info;
 
 typedef struct {
+    int64 Uptime;       // ms
+    int64 InitElapsed;  // ms
+    BOOL  SecurityMode;
+    BOOL  IsHealthy;
+} RT_Core;
+
+typedef struct {
+    int64 NumCalls;
+    int64 NumRedirect;
+    int64 NumFallback;
+    int64 NumRTMethod;
+    int64 NumRawProc;
+} RT_Proc;
+
+typedef struct {
+    int64 NumCalls;
+    int32 LastPreElapsed;   // ms
+    int32 LastPostElapsed;  // ms
+    int64 TotalPreElapsed;  // ms
+    int64 TotalPostElapsed; // ms
+    int32 MinPreElapsed;    // ms
+    int32 MaxPreElapsed;    // ms
+    int32 MinPostElapsed;   // ms
+    int32 MaxPostElapsed;   // ms
+} RT_SleepM;
+
+typedef struct {
     LT_Status Library;
     MT_Status Memory;
     TT_Status Thread;
     RT_Status Resource;
+    AS_Status Argument;
+    IS_Status Storage;
     DT_Status Detector;
     WD_Status Watchdog;
     SM_Status Sysmon;
     SD_Status Shield;
+    RT_Core   Core;
+    RT_Proc   Proc;
+    RT_SleepM Sleep;
 } Runtime_Metrics;
 
 typedef errno (*RTSleepHR_t)(uint32 milliseconds);
 typedef errno (*RTHide_t)();
 typedef errno (*RTRecover_t)();
-typedef errno (*RTOptions_t)(Runtime_Opts* opts);
-typedef errno (*RTInfo_t)(Runtime_Info* info);
-typedef errno (*RTMetrics_t)(Runtime_Metrics* metrics);
+typedef errno (*RTGetOptions_t)(Runtime_Opts* opts);
+typedef errno (*RTGetInfo_t)(Runtime_Info* info);
+typedef errno (*RTGetMetrics_t)(Runtime_Metrics* metrics);
 typedef errno (*RTCleanup_t)();
 typedef errno (*RTExit_t)();
 typedef void  (*RTStop_t)(uint32 code);
@@ -601,6 +658,7 @@ typedef struct {
         ArgGetPointer_t GetPointer;
         ArgErase_t      Erase;
         ArgEraseAll_t   EraseAll;
+        ArgGetStatus_t  Status;
     } Argument;
 
     struct {
@@ -609,6 +667,7 @@ typedef struct {
         ImsGetPointer_t GetPointer;
         ImsDelete_t     Delete;
         ImsDeleteAll_t  DeleteAll;
+        ImsGetStatus_t  Status;
     } Storage;
 
     struct {
@@ -758,15 +817,15 @@ typedef struct {
     } Shield;
 
     struct {
-        GetTEB_t GetTEB;
-        GetPEB_t GetPEB;
-        GetPML_t GetPML;
+        GetTEB_t TEB;
+        GetPEB_t PEB;
+        GetPML_t PML;
     } Env;
 
     struct {
-        GetDLL_t GetMainEXE;
-        GetDLL_t GetKernel32;
-        GetDLL_t GetNtdll;
+        GetDLL_t MainEXE;
+        GetDLL_t Kernel32;
+        GetDLL_t Ntdll;
     } DLL;
 
     struct {
@@ -775,15 +834,15 @@ typedef struct {
     } Raw;
 
     struct {
-        RTSleepHR_t Sleep;
-        RTHide_t    Hide;
-        RTRecover_t Recover;
-        RTOptions_t Options;
-        RTInfo_t    Info;
-        RTMetrics_t Metrics;
-        RTCleanup_t Cleanup;
-        RTExit_t    Exit;
-        RTStop_t    Stop;
+        RTSleepHR_t    Sleep;
+        RTHide_t       Hide;
+        RTRecover_t    Recover;
+        RTGetOptions_t Options;
+        RTGetInfo_t    Info;
+        RTGetMetrics_t Metrics;
+        RTCleanup_t    Cleanup;
+        RTExit_t       Exit;
+        RTStop_t       Stop;
     } Core;
 
     struct {
