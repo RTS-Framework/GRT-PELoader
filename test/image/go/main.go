@@ -100,16 +100,20 @@ func testRuntimeAPI() {
 
 	// find runtime methods
 	for _, proc := range []string{
-		"RT_GetProcAddressByName",
-		"RT_GetProcAddressByHash",
-		"RT_GetProcAddressByHashML",
-		"RT_GetProcAddressOriginal",
+		"RT_GetProcAddress",
+		"RT_GetProcAddressEx",
+		"RT_GetProcAddressRaw",
 
-		"RT_GetPEB",
 		"RT_GetTEB",
-		"RT_GetIMOML",
+		"RT_GetPEB",
+		"RT_GetPML",
 
+		"RT_GetOptions",
+		"RT_GetRuntimeM",
+		"RT_GetInfo",
 		"RT_GetMetrics",
+		"RT_SleepHR",
+
 		"RT_Sleep",
 		"RT_ExitProcess",
 
@@ -128,6 +132,7 @@ func testRuntimeAPI() {
 		"DT_Status",
 
 		"WD_SetHandler",
+		"WD_SetTimeout",
 		"WD_Kick",
 		"WD_Enable",
 		"WD_Disable",
@@ -135,6 +140,8 @@ func testRuntimeAPI() {
 		"WD_Status",
 
 		"SM_Status",
+
+		"SD_Status",
 	} {
 		dllProcAddr := GleamRT.MustFindProc(proc).Addr()
 		getProcAddr, err := windows.GetProcAddress(hGleamRT, proc)
@@ -147,12 +154,12 @@ func testRuntimeAPI() {
 	fmt.Println()
 
 	// get original GetProcAddress
-	GetProcAddressOriginal, err := windows.GetProcAddress(hGleamRT, "RT_GetProcAddressOriginal")
+	GetProcAddressRaw, err := windows.GetProcAddress(hGleamRT, "RT_GetProcAddressRaw")
 	checkError(err)
 	procName, err := syscall.BytePtrFromString("GetProcAddress")
 	checkError(err)
 	ret, _, _ := syscall.SyscallN(
-		GetProcAddressOriginal,
+		GetProcAddressRaw,
 		hKernel32, (uintptr)(unsafe.Pointer(procName)), // #nosec
 	)
 	if ret == null {
@@ -168,7 +175,7 @@ func testRuntimeAPI() {
 	procName, err = syscall.BytePtrFromString("VirtualAlloc")
 	checkError(err)
 	ret, _, _ = syscall.SyscallN(
-		GetProcAddressOriginal,
+		GetProcAddressRaw,
 		hKernel32, (uintptr)(unsafe.Pointer(procName)), // #nosec
 	)
 	if ret == null {
@@ -280,7 +287,7 @@ func testLargeBuffer() {
 			time.Sleep(250 * time.Millisecond)
 			now := sha256.Sum256(buf)
 			if raw != now {
-				log.Fatalln("memory data is incorrect")
+				log.Fatalln("memory data is broken")
 			}
 			time.Sleep(period)
 		}
@@ -421,13 +428,13 @@ func kernel32Sleep() {
 		var counter int
 		for {
 			// wait go routine run other test
-			time.Sleep(1 + time.Duration(rand.Intn(1000))*time.Millisecond) // #nosec
+			time.Sleep(100 + time.Duration(rand.Intn(2000))*time.Millisecond) // #nosec
 			// trigger Gleam-RT SleepHR
 			fmt.Println("call kernel32.Sleep [hooked]")
 			now := time.Now()
-			ret, _, _ := procSleep.Call(1 + uintptr(rand.Intn(1000))) // #nosec
+			ret, _, _ := procSleep.Call(1 + uintptr(rand.Intn(3000))) // #nosec
 			if ret != noError {
-				log.Fatalf("occurred error when sleep: 0x%X\n", ret)
+				log.Fatalf("occurred error when slept: 0x%X\n", ret)
 			}
 			counter++
 			fmt.Println("Sleep:", time.Since(now), "Times:", counter)
