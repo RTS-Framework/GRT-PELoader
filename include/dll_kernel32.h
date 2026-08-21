@@ -68,6 +68,8 @@ typedef HANDLE HLOCAL;
 #define FILE_FLAG_NO_BUFFERING    0x20000000
 #define FILE_FLAG_WRITE_THROUGH   0x80000000
 
+typedef DWORD (*ThreadProc_t)(LPVOID lpParameter);
+
 typedef HMODULE (*LoadLibraryA_t)
 (
     LPCSTR lpLibFileName
@@ -115,7 +117,7 @@ typedef BOOL (*VirtualProtect_t)
 
 typedef HANDLE (*CreateThread_t)
 (
-    POINTER lpThreadAttributes, SIZE_T dwStackSize, POINTER lpStartAddress,
+    POINTER lpThreadAttributes, SIZE_T dwStackSize, ThreadProc_t lpStartAddress,
     LPVOID lpParameter, DWORD dwCreationFlags, DWORD* lpThreadId
 );
 
