@@ -262,10 +262,10 @@ PELoader_M* InitPELoader(Runtime_M* runtime, PELoader_Cfg* config)
     loader->NotEraseInstruction = opts.NotEraseInstruction;
     loader->NotAdjustProtect    = opts.NotAdjustProtect;
     // store process environment
-    loader->PEB = runtime->Env.GetPEB();
-    loader->PML = runtime->Env.GetPML();
+    loader->PEB = runtime->Env.PEB();
+    loader->PML = runtime->Env.PML();
     // store core dll handle
-    loader->hKernel32 = runtime->DLL.GetKernel32();
+    loader->hKernel32 = runtime->DLL.Kernel32();
     // store config and context
     loader->Runtime = runtime;
     loader->MainMemPage = memPage;
@@ -356,7 +356,7 @@ static void* allocMainMemPage(Runtime_M* runtime, PELoader_Cfg* config)
     uint pHash = 0xA7CFDD6F;
     uint hKey  = 0x0F2BB61F;
 #endif
-    HMODULE hKernel32 = runtime->DLL.GetKernel32();
+    HMODULE hKernel32 = runtime->DLL.Kernel32();
     VirtualAlloc_t virtualAlloc = config->FindAPI(hKernel32, pHash, hKey);
     if (virtualAlloc == NULL)
     {
@@ -1095,7 +1095,7 @@ void* ldr_GetProcAddress(HMODULE hModule, LPCSTR lpProcName)
         return NULL;
     }
     // get process module list snapshot
-    PML* pml = runtime->Env.GetPML();
+    PML* pml = runtime->Env.PML();
     // use "mem_init" for prevent incorrect compiler
     // optimize and generate incorrect template
     uint16 modName[MAX_PATH];
@@ -1625,7 +1625,7 @@ static void ldr_alloc_tls_block()
     mem_copy(tls, loader->TLSBlock, loader->TLSLen);
 
     // read the original TLS block address
-    TEB* teb = runtime->Env.GetTEB();
+    TEB* teb = runtime->Env.TEB();
     uintptr* tlsPtr = teb->ThreadLocalStoragePointer;
 
     // store the original TLS block address
@@ -1650,7 +1650,7 @@ static void ldr_free_tls_block()
     }
 
     // read the hooked TLS block address
-    TEB* teb = runtime->Env.GetTEB();
+    TEB* teb = runtime->Env.TEB();
     uintptr* tlsPtr = teb->ThreadLocalStoragePointer;
 
     // read the original TLS block address
