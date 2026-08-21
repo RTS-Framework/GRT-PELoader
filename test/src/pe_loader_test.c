@@ -46,11 +46,11 @@ bool TestInitPELoader()
     }
 
     // set HashAPI source
-    FindAPI_MA_t findAPI;
+    FindAPI_MA_t FindAPI;
 #ifdef NO_RUNTIME
-    findAPI = &FindAPI;
+    FindAPI = &FindAPI_MA;
 #else
-    findAPI = runtime->HashAPI.FindAPI_MA;
+    FindAPI = runtime->HashAPI.FindAPI_MA;
 #endif // NO_RUNTIME
 
     // read PE image file
@@ -94,7 +94,7 @@ bool TestInitPELoader()
     // cmdLineW = L"loader.exe -p1 123 -p2 \"test\"";
 
     PELoader_Cfg cfg = {
-        .FindAPI        = findAPI,
+        .FindAPI        = FindAPI,
         .Image          = image.buf,
         .CommandLineA   = cmdLineA,
         .CommandLineW   = cmdLineW,
@@ -106,13 +106,13 @@ bool TestInitPELoader()
         .StdError       = NULL,
         .NotStopRuntime = false,
     };
-#ifdef PIC_MODE
+#ifdef DISABLE_PIC_MODE
+    pe_loader = InitPELoader(runtime, &cfg);
+#else
     typedef PELoader_M* (*InitPELoader_t)(Runtime_M* runtime, PELoader_Cfg* cfg);
     InitPELoader_t initPELoader = loadInstance();
     pe_loader = initPELoader(runtime, &cfg);
-#else
-    pe_loader = InitPELoader(runtime, &cfg);
-#endif // PIC_MODE
+#endif // DISABLE_PIC_MODE
     if (pe_loader == NULL)
     {
         printf_s("failed to initialize PE loader: 0x%X\n", GetLastErrno());
@@ -138,7 +138,7 @@ static void* loadInstance()
         return NULL;
     }
     mem_copy(mem, (void*)begin, size);
-    printf_s("instance: 0x%zX\n", (uintptr)mem);
+    printf_s("Instance: 0x%zX\n", (uintptr)mem);
     return mem;
 }
 
